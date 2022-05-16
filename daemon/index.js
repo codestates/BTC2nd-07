@@ -35,25 +35,44 @@ const createSchema = async(block_num) => {
     return [block, txs];
 }
 
+const runDaemon = async() => {
+    let lastIrrBlock = (await getBlockInfo()).last_irreversible_block_num;
+    let lastCurBlock = (await infoInterface.getInfo(lastIrrBlock)).last_update_block_num;
+
+    console.log(lastIrrBlock, lastCurBlock);
+
+    var blocks = [];
+    var transactions = [];
+    for (let num = lastCurBlock+1; num <= lastIrrBlock; num++){
+        let [block, txs] = await createSchema(num);
+        blocks = [...blocks, ...[block]];
+        transactions = [...transactions, ... txs];
+
+        if (blocks.length === 12){
+            await blockInterface.saveAllBlocks(blocks);
+            await transactionInterface.saveAlltransactions(transactions);
+            await infoInterface.updateInfo(block._id);
+
+            blocks = [];
+            transactions = [];
+        }
+
+    }
+
+    if(blocks.length !== 0){
+        await blockInterface.saveAllBlocks(blocks);
+        await transactionInterface.saveAlltransactions(transactions);
+        await infoInterface.updateInfo(lastIrrBlock);
+    }
+
+    return;
+}
+
 mongoose.connect(DB_URI, {useNewUrlParser: true, useUnifiedTopology: true})
         .then(async () => {
             console.log('DB is connecting...');
-
-            const lastIrrBlock = (await getBlockInfo()).last_irreversible_block_num;
-            const lastCurBlock = (await infoInterface.getInfo(lastIrrBlock)).last_update_block_num;
-
-            console.log(lastIrrBlock, lastCurBlock);
-
-            var blocks = [];
-            var transactions = [];
-            for (let num = lastCurBlock+1; num <= lastIrrBlock; num++){
-                let [block, txs] = await createSchema(num);
-                blocks = [...blocks, ...[block]];
-                transactions = [...transactions, ... txs]
+            while(1){
+                await runDaemon();
+                await setTimeout(()=>{}, 100);
             }
-
-            await blockInterface.saveAllBlocks(blocks);
-            await transactionInterface.saveAlltransactions(transactions);
-
-            await infoInterface.updateInfo(lastIrrBlock);
         })
